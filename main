@@ -1,0 +1,382 @@
+
+
+
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <math.h>
+#include "bitmap_image.hpp"
+
+
+struct arrayofbmp {
+	unsigned int width;
+	unsigned int height;
+	unsigned char** pixelarray; // row=y column=x  grayscale
+
+};
+unsigned char pixelToGrayscale(rgb_t pixel);
+rgb_t grayscaleToRGB(unsigned char grayscalepixel);
+unsigned char getMedianNumber(double** arr, int size);   //size는 nXn에서 n을 의미함 엔트리의 갯수를 의미하는 것이 아님
+void insertionSort(unsigned char n, unsigned char** arr, int size);
+void copyArrayofbmp(arrayofbmp source, arrayofbmp& target);
+void copy2Darray(unsigned char** source, unsigned char** target, int lows, int columns);
+class Imagecontrol {
+public:
+	arrayofbmp image;
+	std::string filename;
+
+	Imagecontrol(std::string file_name);// bmp filename  -> image array
+	unsigned int getWidth() { return image.width; }
+	void setWidth(unsigned int w) { image.width = w; }
+	unsigned int getHeight() { return image.height; }
+	void setHeight(unsigned int h) { image.height = h; }
+	void setPixelOfpixelarray(unsigned int x, unsigned int y, unsigned char grayscale) { image.pixelarray[y][x] = grayscale; }
+	unsigned char getPixelOfpixelarray(unsigned int x, unsigned int y) { return image.pixelarray[y][x]; }
+	void saveImage();
+	void makePixelArray(bitmap_image img);
+	arrayofbmp getimage() { return image; }
+	void setimage(arrayofbmp source, arrayofbmp& target) { copyArrayofbmp(source, target); }
+}; 
+struct Filters {
+	double** filter;
+	int filtersize;                //가로 세로의 크기를 의미함 홀수만 되고 짝수는 안됨
+	std::string filtername;
+};
+class Matrixfunctions {                                // filters 
+	Filters flt;
+public:
+	Matrixfunctions(std::string fname, int filtersize);
+	void setFilter(std::string fname, int filtersize);
+	void setFilterSize(int size) { flt.filtersize = size; }
+	void filtering(arrayofbmp *sourceimg);                                 //필터링 명령
+	void medianfiltering(arrayofbmp *img);
+	unsigned char applyFilter_nXn(arrayofbmp img, int x, int y);           //필터를 적용한 결과를 내는 함수
+	
+	unsigned char applyMedianFilter_nxn(arrayofbmp img, unsigned int x, unsigned int y, unsigned char* sortedarray);
+};
+const std::string medianfiltername = "Median";
+const std::string meanfiltername = "Mean";
+const std::string laplacian_gaussianfiltername = "laplacian_gaussian";
+class UI {                                            //console UI
+public:
+	UI();
+	std::string setfiltername(int n);
+};
+UI::UI() {
+	std::string filename;
+	std::string filtername;
+	int size;
+	printf("Welcome to photoshop ver0.00000000001\ninput filename or route : ");
+	std::cin >> filename;
+	Imagecontrol img(filename);
+	printf("\n what do you want to do? \n1.mean filtering\n2.Median filtering");
+	int n;
+	scanf_s("%d", &n);
+	while ((n>=3)||(n<1)) {
+		printf("wrong input");
+		scanf_s("%d ", &n);
+	}
+	filtername=setfiltername(n);
+	printf("what size do you want(only oddnumber 홀수만) : ");
+	scanf_s("%d", &size);
+	while ((size/2)==0) {
+		printf("wrong input");
+		scanf_s("%d ", &size);
+	}
+	
+	Matrixfunctions mat(filtername,size);
+	if (filtername == medianfiltername) mat.medianfiltering(&img.image);
+	else { mat.filtering(&img.image); }
+	img.saveImage();
+}
+std::string UI::setfiltername(int n) {
+	switch (n) {
+	case 1: return meanfiltername;
+	case 2: return medianfiltername;
+	default:("wrong input"); return "";
+	}
+}/*
+struct Filters {
+	double** filter;
+	int filtersize;                //가로 세로의 크기를 의미함 홀수만 되고 짝수는 안됨
+	std::string filtername;
+};
+class Matrixfunctions {                                // filters 
+	Filters flt;
+public:
+	Matrixfunctions(std::string fname, int filtersize);
+	void setFilter(std::string fname, int filtersize);
+	void setFilterSize(int size) { flt.filtersize = size; }
+	void filtering(arrayofbmp sourceimg);                                 //필터링 명령
+	void medianfiltering(arrayofbmp img);
+	unsigned char applyFilter_nXn(arrayofbmp img,int x ,int y);           //필터를 적용한 결과를 내는 함수
+};*/
+Matrixfunctions::Matrixfunctions(std::string fname, int filtersize) {
+	setFilter(fname, filtersize);
+}
+void Matrixfunctions::setFilter(std::string fname, int filtersize) {
+	flt.filtersize = filtersize;
+	flt.filtername = fname;
+	if (fname == meanfiltername) {
+		flt.filter = (double **)malloc(flt.filtersize*sizeof(double *));
+		for (int i = 0; i < flt.filtersize; i++) {
+			flt.filter[i] = (double*)malloc(flt.filtersize * sizeof(double));
+		}
+		for (int i = 0; i < flt.filtersize; i++)
+			for (int j = 0; j < flt.filtersize; j++)  flt.filter[i][j] = (double)1 / (double)filtersize/(double)filtersize; 
+		
+	}
+	else if (fname == medianfiltername) {
+		flt.filter = (double**)malloc(flt.filtersize * sizeof(double*));
+		for (int i = 0; i < flt.filtersize; i++) {
+			flt.filter[i] = (double*)malloc(flt.filtersize * sizeof(double));
+		}
+	}
+
+}
+void Matrixfunctions::filtering(arrayofbmp *sourceimg) {
+	
+
+	arrayofbmp resultimg;
+	copyArrayofbmp(*sourceimg, resultimg);
+	unsigned int x = 0, y = 0;
+	while (y < resultimg.height) {
+		while (x < resultimg.width) {
+			resultimg.pixelarray[y][x]=applyFilter_nXn(*sourceimg, x, y);
+			x++;
+		}
+		x = 0;
+		y++;
+	}
+	 x = 0, y = 0;
+	while (y < resultimg.height) {
+		while (x < resultimg.width) {
+			(*sourceimg).pixelarray[y][x] = resultimg.pixelarray[y][x];
+			//printf("%d ", resultimg.pixelarray[y][x]);
+			x++;
+		}
+		x = 0;
+		y++;
+	}
+	//unsigned char** temptr;
+	//copy2Darray(resultimg.pixelarray, sourceimg.pixelarray, sourceimg.height, sourceimg.height);
+	//temptr = sourceimg.pixelarray;
+	//sourceimg.pixelarray = resultimg.pixelarray;
+	//if (temptr)free(temptr);
+}
+
+void Matrixfunctions::medianfiltering(arrayofbmp *sourceimg) {
+	arrayofbmp resultimg;
+	copyArrayofbmp(*sourceimg, resultimg);
+	unsigned int num=flt.filtersize/2;
+	unsigned int x =num, y = num;
+	unsigned char* sortedarray = (unsigned char*)malloc((sizeof(unsigned char)) * (x + 1));
+
+	while (y < resultimg.height-num-1) {
+		while (x < resultimg.width - num - 1) {
+			resultimg.pixelarray[y][x] = applyMedianFilter_nxn(*sourceimg, x, y, sortedarray);
+			//printf("%d ", resultimg.pixelarray[y][x]);
+			x++;
+			break;
+		}
+		while (x < resultimg.width-num-1) {
+			resultimg.pixelarray[y][x] = applyMedianFilter_nxn(*sourceimg, x, y, sortedarray);
+			//printf("%d ", resultimg.pixelarray[y][x]);
+			x++;
+		}
+		x = 0;
+		y++;
+	}
+	x = 0, y = 0;
+	while (y < resultimg.height) {
+		while (x < resultimg.width) {
+			(*sourceimg).pixelarray[y][x] = resultimg.pixelarray[y][x];
+			x++;
+		}
+		x = 0;
+		y++;
+	}
+}
+
+unsigned char Matrixfunctions::applyMedianFilter_nxn(arrayofbmp img, unsigned int x, unsigned int y , unsigned char *sortedarray) {
+	unsigned int num = flt.filtersize / 2;
+	unsigned int i = 0, j = 0;
+	while ((int)i < flt.filtersize) {
+		while ((int)j < flt.filtersize) {
+			flt.filter[i][j] = (double)((int)img.pixelarray[y+i-num][x+j-num]);
+			j++;
+		}
+		j = 0;
+		i++;
+	}/*
+	for (int i = 0; i < flt.filtersize; i++) {
+		for (int j = 0; j < flt.filtersize; j++) {
+			printf("%d", flt.filter[i][j]);
+		}
+	}*/
+	unsigned char a =getMedianNumber(flt.filter, (int)flt.filtersize);
+	
+	
+	return a;
+	
+}
+
+unsigned char Matrixfunctions::applyFilter_nXn(arrayofbmp img, int x, int y) {
+	int i = 0, j = 0, num=flt.filtersize/2;//num is filtersize/2
+	double result=0;
+	while (i < flt.filtersize) {
+		if ((y + i - num < 0)||(y+i-num>=(int)img.height)) { i++; continue; }
+			
+		while (j < flt.filtersize) {
+		
+			if ((x + j - num < 0)||(x+j-num>= (int)img.width)) { j++; continue; }
+			result += (double)img.pixelarray[y+i-num][x+j-num] * flt.filter[i][j];
+			
+			j++;
+		}
+		j = 0;
+		i++;
+	}
+	//printf("%d ", (int)result);
+	return (unsigned char)result;
+}
+
+
+void copyArrayofbmp(arrayofbmp source,arrayofbmp& target) {
+	target.height = source.height;
+	target.width = source.width;
+	
+	target.pixelarray = (unsigned char**)malloc((target.height) * sizeof(unsigned char*));
+	for (unsigned int i = 0; i < target.height; i++)
+		target.pixelarray[i] = (unsigned char*)malloc((source.width) * sizeof(unsigned char));
+	copy2Darray(source.pixelarray, target.pixelarray, target.height, target.width);
+}
+void copy2Darray(unsigned char** source,unsigned char** target, int lows ,int columns) {
+	int x = 0, y = 0;
+	while (y < lows) {
+		while (x < columns) {
+			target[y][x] = source[y][x];
+			x++;
+		}
+		x = 0;
+		y++;
+	}
+
+}
+/*
+class Imagecontrol {
+	arrayofbmp image;
+	std::string filename;
+public:
+	Imagecontrol(std::string file_name);// bmp filename  -> image array
+	unsigned int getWidth() { return image.width; }
+	void setWidth(unsigned int w) { image.width = w; }
+	unsigned int getHeight() { return image.height; }
+	void setHeight(unsigned int h) { image.height = h; }
+	void setPixelOfpixelarray(unsigned int x, unsigned int y, unsigned char grayscale) { image.pixelarray[y][x] = grayscale; }
+	unsigned char getPixelOfpixelarray(unsigned int x, unsigned int y) { return image.pixelarray[y][x]; }
+	void saveImage();
+	void makePixelArray(bitmap_image img);
+	arrayofbmp getimage() { return image; }
+	void setimage(arrayofbmp source,arrayofbmp &target ) { copyArrayofbmp(source, target); }
+};*/
+Imagecontrol::Imagecontrol(std::string file_name) {
+	filename = file_name;
+	bitmap_image img(file_name);
+	
+	if (!img)
+	{
+		printf("test01() - Error - Failed to open '%s'\n", file_name.c_str());
+		return;
+	}
+	setWidth(img.width());
+	setHeight(img.height());
+	makePixelArray(img);
+}
+
+void Imagecontrol::makePixelArray(bitmap_image img)
+{
+	image.pixelarray = (unsigned char**)malloc(getHeight() * sizeof(unsigned char*));
+	for (unsigned int i = 0; i < getHeight(); i++)
+		image.pixelarray[i] = (unsigned char*)malloc(getWidth() * sizeof(unsigned char));
+
+	unsigned int x = 0, y = 0;
+	
+	while (y < getHeight()-1) {
+		while (x < getWidth()-1) {
+			setPixelOfpixelarray(x, y, pixelToGrayscale(img.get_pixel(x, y)));
+			x++;
+		}
+		x = 0;
+		y++;
+	}
+	setHeight(getHeight()-1);
+	setWidth(getWidth() - 1);
+}
+void Imagecontrol::saveImage() {
+	std::string savefilename;
+	printf("input save file name(doesn't support filename overlap) : ");
+	std::cin >> savefilename;
+	bitmap_image img(filename);
+	unsigned int x = 0, y = 0;
+	while (y < getHeight() ) {
+		while (x < getWidth()) {
+			img.set_pixel(x, y, grayscaleToRGB(image.pixelarray[y][x]));
+			x++;
+		}
+		x = 0;
+		y++;
+	}
+	img.save_image(savefilename);
+}
+
+unsigned char pixelToGrayscale(rgb_t pixel) {
+	return (unsigned char)(((int)pixel.red + (int)pixel.green +(int)pixel.blue) / 3);
+}
+
+rgb_t grayscaleToRGB(unsigned char grayscalepixel) {
+	rgb_t x;
+	x.blue = grayscalepixel;
+	x.red = grayscalepixel;
+	x.green=grayscalepixel;
+	return x;
+}
+
+unsigned char getMedianNumber(double** arr, int size) {
+	int x = (size * size) / 2;
+	unsigned char* sortedarray = (unsigned char*)malloc((sizeof(unsigned char)) * (x+1));
+
+	for (int i = 0; i <= x; i++) sortedarray[i] = 0;
+
+	unsigned char temp;
+	for (int i = 0; i < size; i++) {
+		for (int j = 0; j < size; j++) {
+			
+			sortedarray[x] = (unsigned char)((int)arr[i][j]);
+
+			for (int k = x - 1; k >= 0; k--) {
+				if (sortedarray[k] < sortedarray[k+1]) {
+					temp = sortedarray[k];
+					sortedarray[k] = sortedarray[k + 1];
+					sortedarray[k + 1] = temp;
+				}
+				else { break; }
+
+			}
+		}
+		
+	}unsigned char result = sortedarray[x-1];
+		
+		free(sortedarray);
+		return result;
+}
+	
+int main()
+{	
+	UI();
+  
+   return 0;
+}
+
